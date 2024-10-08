@@ -136,7 +136,7 @@ void rx5808_set_clock_freq_mhz(struct rx5808 *self, uint16_t freq)
 	self->clock_freq_mhz = freq;
 }
 
-/** ref_clock_freq = (clock_freq / ref_clock_div). Default: 8. */
+//ref_clock_freq = (clock_freq / ref_clock_div). Default: 8.
 bool rx5808_set_ref_clock_divisor(struct rx5808 *self, uint32_t div)
 {
 	if (self->set_clock_divisor_update)
@@ -149,7 +149,7 @@ bool rx5808_set_ref_clock_divisor(struct rx5808 *self, uint32_t div)
 	return true;
 }
 
-/** Returns true if success. */
+//Returns true if success.
 bool rx5808_set_freq_mhz(struct rx5808 *self, uint16_t freq)
 {
 	if (self->set_freq_mhz_update)
@@ -173,7 +173,8 @@ void rx5808_init(struct rx5808 *self)
 	rx5808_set_freq_mhz(self, 5800);
 }
 
-// UPDATE ---------------------------------------------------------------------
+// API ------------------------------------------------------------------------
+//Returns SPI data (LSBFIRST). CS must be LOW during transmission.
 uint32_t rx5808_get_data_u32(struct rx5808 *self) { return self->frame.data; }
 
 uint8_t rx5808_get_data_len_in_bits(struct rx5808 *self)
@@ -181,6 +182,25 @@ uint8_t rx5808_get_data_len_in_bits(struct rx5808 *self)
 	return self->frame.len_in_bits;
 }
 
+//Acknowledge rx5808 module that we successfully wrote SPI frame
+void rx5808_ack_write(struct rx5808 *self)
+{
+	if (self->event == RX5808_EVENT_WRITE)
+		self->event = RX5808_EVENT_NONE;
+}
+
+//Acknowledge rx5808 module that we successfully acknowledged new rssi value
+void rx5808_ack_rssi(struct rx5808 *self, float rssi)
+{
+	self->rssi = rssi;
+
+	if (self->event == RX5808_EVENT_QUERY_RSSI)
+		self->event = RX5808_EVENT_NONE;
+}
+
+void rx5808_ack_all(struct rx5808 *self) { self->event = RX5808_EVENT_NONE; }
+
+// UPDATE ---------------------------------------------------------------------
 float rx5808_get_rssi(struct rx5808 *self) { return self->rssi; }
 
 enum rx5808_event rx5808_get_event(struct rx5808 *self) { return self->event; }
@@ -218,22 +238,5 @@ enum rx5808_event rx5808_update(struct rx5808 *self)
 	self->event = RX5808_EVENT_QUERY_RSSI;
 	return self->event;
 }
-
-// ACKNOWLEDGEMETS ------------------------------------------------------------
-void rx5808_ack_write(struct rx5808 *self)
-{
-	if (self->event == RX5808_EVENT_WRITE)
-		self->event = RX5808_EVENT_NONE;
-}
-
-void rx5808_ack_rssi(struct rx5808 *self, float rssi)
-{
-	self->rssi = rssi;
-
-	if (self->event == RX5808_EVENT_QUERY_RSSI)
-		self->event = RX5808_EVENT_NONE;
-}
-
-void rx5808_ack_all(struct rx5808 *self) { self->event = RX5808_EVENT_NONE; }
 
 #endif //RX5808_GUARD

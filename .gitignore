@@ -1,1 +1,4 @@
 test*
+build
+*.ino
+arduino/rx5808*
