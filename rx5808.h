@@ -107,8 +107,6 @@ struct rx5808 {
 	struct rx5808_frame frame;
 	enum rx5808_event   event;
 
-	float rssi;
-
 	uint16_t clock_freq_mhz;
 	uint32_t ref_clock_div;
 	float	 ref_clock;
@@ -116,6 +114,10 @@ struct rx5808 {
 
 	uint16_t set_freq_mhz;
 	bool	 set_freq_mhz_update;
+	
+	uint32_t samples_sum;
+	uint32_t samples_count;
+	float    rssi_raw;
 };
 
 // PRIVATE --------------------------------------------------------------------
@@ -162,15 +164,22 @@ bool rx5808_set_freq_mhz(struct rx5808 *self, uint16_t freq)
 }
 
 // INIT -----------------------------------------------------------------------
+void rx5808_reset_rssi(struct rx5808 *self)
+{
+	self->samples_sum   = 0;
+	self->samples_count = 0;
+	self->rssi_raw      = 0;
+}
+
 void rx5808_init(struct rx5808 *self)
 {
 	self->event = RX5808_EVENT_NONE;
 
-	self->rssi = 0;
-
 	rx5808_set_clock_freq_mhz(self, 8);
 	rx5808_set_ref_clock_divisor(self, 8);
 	rx5808_set_freq_mhz(self, 5800);
+
+	rx5808_reset_rssi(self);
 }
 
 // API ------------------------------------------------------------------------
@@ -189,10 +198,35 @@ void rx5808_ack_write(struct rx5808 *self)
 		self->event = RX5808_EVENT_NONE;
 }
 
-//Acknowledge rx5808 module that we successfully acknowledged new rssi value
-void rx5808_ack_rssi(struct rx5808 *self, float rssi)
+//Sampling method used for real time rssi averaging
+void rx5808_sample_rssi(struct rx5808 *self, uint32_t rssi)
 {
-	self->rssi = rssi;
+	assert(rssi <= 0x7FFFFFFF);
+		
+	self->samples_sum += rssi;
+	self->samples_count++;
+
+	//Shrink in twice to prevent integer overflow
+	if (self->samples_sum >= 0x7FFFFFFF ||
+	    self->samples_count >= 0x7FFFFFFF) {
+		self->samples_sum   /= 2;
+		self->samples_count /= 2;
+	}
+}
+
+//Acknowledge rx5808 module that we successfully acknowledged new rssi value
+//Pass only integer values less than half of the uint32_t range
+void rx5808_ack_rssi(struct rx5808 *self, uint32_t rssi)
+{
+	uint32_t delta_raw = self->rssi_raw;
+	
+	self->rssi_raw = rssi;
+
+	//Throttle sudden RSSI spikes
+	if (delta_raw && rssi > delta_raw)
+		rssi = delta_raw + 1;
+	
+	rx5808_sample_rssi(self, rssi);
 
 	if (self->event == RX5808_EVENT_QUERY_RSSI)
 		self->event = RX5808_EVENT_NONE;
@@ -201,7 +235,18 @@ void rx5808_ack_rssi(struct rx5808 *self, float rssi)
 void rx5808_ack_all(struct rx5808 *self) { self->event = RX5808_EVENT_NONE; }
 
 // UPDATE ---------------------------------------------------------------------
-float rx5808_get_rssi(struct rx5808 *self) { return self->rssi; }
+float rx5808_get_rssi(struct rx5808 *self)
+{
+	if (self->samples_count <= 0)
+		return 0;
+	
+	return self->samples_sum / self->samples_count;
+}
+
+uint32_t rx5808_get_rssi_raw(struct rx5808 *self)
+{	
+	return self->rssi_raw;
+}
 
 enum rx5808_event rx5808_get_event(struct rx5808 *self) { return self->event; }
 
@@ -230,6 +275,9 @@ enum rx5808_event rx5808_update(struct rx5808 *self)
 		rx5808_write_frame(self, RX5808_REG_B,
 				   (uint32_t)(syn_rf_n_reg << 7) |
 				       syn_rf_a_reg);
+
+		//reset RSSI at this point
+		rx5808_reset_rssi(self);
 
 		self->event = RX5808_EVENT_WRITE;
 		return self->event;
