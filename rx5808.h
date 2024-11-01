@@ -1,6 +1,10 @@
 #ifndef  RX5808_GUARD
 #define  RX5808_GUARD
 
+//#define RX5808_RSSI_FILTER_SPIKES
+#define RX5808_RSSI_CHARGE_FACTOR    0.25
+#define RX5808_RSSI_DISCHARGE_FACTOR 0.5
+
 ///////////////////////////////////////////////////////////////////////////////
 // RX5808 5.8 gHz video receiver bands */
 #include <stdint.h>
@@ -218,13 +222,7 @@ void rx5808_sample_rssi(struct rx5808 *self, uint32_t rssi)
 //Pass only integer values less than half of the uint32_t range
 void rx5808_ack_rssi(struct rx5808 *self, uint32_t rssi)
 {
-	uint32_t delta_raw = self->rssi_raw;
-	
 	self->rssi_raw = rssi;
-
-	//Throttle sudden RSSI spikes
-	if (delta_raw && rssi > delta_raw)
-		rssi = delta_raw + 1;
 	
 	rx5808_sample_rssi(self, rssi);
 
