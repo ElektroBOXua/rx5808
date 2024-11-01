@@ -1,10 +1,6 @@
 #ifndef  RX5808_GUARD
 #define  RX5808_GUARD
 
-//#define RX5808_RSSI_FILTER_SPIKES
-#define RX5808_RSSI_CHARGE_FACTOR    0.25
-#define RX5808_RSSI_DISCHARGE_FACTOR 0.5
-
 ///////////////////////////////////////////////////////////////////////////////
 // RX5808 5.8 gHz video receiver bands */
 #include <stdint.h>
