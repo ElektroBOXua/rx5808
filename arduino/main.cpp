@@ -1,3 +1,20 @@
+///////////////////////////////////////////////////////////////////////////////
+// https://github.com/furdog/async/blob/main/async.h
+#ifndef ASYNC_GUARD
+typedef void * async;
+#define ASYNC_CAT1(a, b) a##b
+#define ASYNC_CAT(a, b) ASYNC_CAT1(a, b)
+#define ASYNC_DISPATCH(state) void **_state = &state; \
+			 if (*_state) { goto **_state; }
+#define ASYNC_YIELD(act) do { *_state = &&ASYNC_CAT(_l, __LINE__); \
+			      act; ASYNC_CAT(_l, __LINE__) :; } while (0)
+#define ASYNC_AWAIT(cond, act) \
+			 do { ASYNC_YIELD(); if (!(cond)) { act; } } while (0)
+#define ASYNC_RESET(act) do { *_state = NULL; act; } while (0)
+#define ASYNC_GUARD
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
 #include <Arduino.h>
 
 static clock_t timestamp_prev = 0;
@@ -16,7 +33,6 @@ clock_t get_delta_time_ms()
 
 ///////////////////////////////////////////////////////////////////////////////
 #include <SPI.h>
-#include "async.h"
 #include "rx5808.h"
 
 #define RX5808_PIN_SPI_CS 5
@@ -81,7 +97,7 @@ void loop()
 {
 	clock_t delta = get_delta_time_ms();
 
-	enum rx5808_event rx_event = rx5808_update(&rx);
+	enum rx5808_event rx_event = rx5808_update(&rx, delta);
 
 	if (rx_event == RX5808_EVENT_WRITE) {
 		size_t i;
@@ -96,12 +112,9 @@ void loop()
 
 		digitalWrite(RX5808_PIN_SPI_CS, HIGH);
 		//SPI.setBitOrder(MSBFIRST);
-
-		rx5808_ack_write(&rx);
-	}
-
-	if (rx_event == RX5808_EVENT_QUERY_RSSI)
+	} else {
 		rx5808_ack_rssi(&rx, analogRead(RX5808_PIN_RSSI));
+	}
 
 	scan_channels(delta);
 }

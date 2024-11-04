@@ -142,14 +142,14 @@ void rx5808_set_clock_freq_mhz(struct rx5808 *self, uint16_t freq)
 }
 
 //ref_clock_freq = (clock_freq / ref_clock_div). Default: 8.
-bool rx5808_set_ref_clock_divisor(struct rx5808 *self, uint32_t div)
+void rx5808_set_ref_clock_divisor(struct rx5808 *self, uint32_t div)
 {
 	self->ref_clock_div	       = div;
 	self->ref_clock		       = (float)self->clock_freq_mhz / div;
 }
 
 //Returns true if success.
-bool rx5808_set_freq_mhz(struct rx5808 *self, uint16_t freq)
+void rx5808_set_freq_mhz(struct rx5808 *self, uint16_t freq)
 {
 	self->set_freq_mhz	  = freq;
 	self->set_freq_mhz_update = true;
