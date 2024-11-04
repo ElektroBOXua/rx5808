@@ -1,6 +1,8 @@
 #ifndef  RX5808_GUARD
 #define  RX5808_GUARD
 
+#define RX5808_RSSI_MIN_MEASURE_TIME_MS 25
+
 ///////////////////////////////////////////////////////////////////////////////
 // https://github.com/furdog/async/blob/main/async.h
 #ifndef ASYNC_GUARD
@@ -18,7 +20,7 @@ typedef void * async;
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
-// RX5808 5.8 gHz video receiver bands */
+// RX5808 5.8 gHz video receiver bands
 #include <stdint.h>
 #include <string.h> //for memcpy
 #include <stdlib.h> //for qsort
@@ -60,7 +62,7 @@ void rx5808_freq_table_init(struct rx5808_freq_table *self)
 {
 	memcpy(self->frequencies, rx5808_freq_table_builtin,
 	       sizeof(rx5808_freq_table_builtin));
-	
+
 	rx5808_freq_table_sort(self);
 
 	self->iter = 0;
@@ -123,15 +125,17 @@ struct rx5808 {
 
 	uint16_t set_freq_mhz;
 	bool	 set_freq_mhz_update;
-	
+
+	clock_t  rssi_timer;
 	uint32_t samples_sum;
 	uint32_t samples_count;
 	float    rssi_raw;
-	
+
 	struct rx5808_frame frame;
 };
 
-// CONFIG ---------------------------------------------------------------------
+///////////////////////////////////////////////////////////////////////////////
+// CONFIG
 void rx5808_set_clock_freq_mhz(struct rx5808 *self, uint16_t freq)
 {
 	self->clock_freq_mhz = freq;
@@ -151,9 +155,11 @@ bool rx5808_set_freq_mhz(struct rx5808 *self, uint16_t freq)
 	self->set_freq_mhz_update = true;
 }
 
-// INIT -----------------------------------------------------------------------
+///////////////////////////////////////////////////////////////////////////////
+// INIT
 void rx5808_reset_rssi(struct rx5808 *self)
 {
+	self->rssi_timer    = 0;
 	self->samples_sum   = 0;
 	self->samples_count = 0;
 	self->rssi_raw      = 0;
@@ -162,7 +168,7 @@ void rx5808_reset_rssi(struct rx5808 *self)
 void rx5808_init(struct rx5808 *self)
 {
 	self->async_state = 0;
-	
+
 	rx5808_set_clock_freq_mhz(self, 8);
 	rx5808_set_ref_clock_divisor(self, 8);
 	rx5808_set_freq_mhz(self, 5800);
@@ -174,7 +180,7 @@ void rx5808_init(struct rx5808 *self)
 void rx5808_sample_rssi(struct rx5808 *self, uint32_t rssi)
 {
 	assert(rssi <= 0x7FFFFFFF);
-		
+
 	self->samples_sum += rssi;
 	self->samples_count++;
 
@@ -186,7 +192,8 @@ void rx5808_sample_rssi(struct rx5808 *self, uint32_t rssi)
 	}
 }
 
-// API ------------------------------------------------------------------------
+///////////////////////////////////////////////////////////////////////////////
+// API
 //Returns SPI data (LSBFIRST). CS must be LOW during transmission.
 uint32_t rx5808_get_data_u32(struct rx5808 *self) { return self->frame.data; }
 
@@ -195,29 +202,35 @@ uint8_t rx5808_get_data_len_in_bits(struct rx5808 *self)
 	return self->frame.len_in_bits;
 }
 
-//Acknowledge rx5808 module that we successfully acknowledged new rssi value
-//Pass only integer values less than half of the uint32_t range
+//Acknowledge raw RSSI value, so library may use it
 void rx5808_ack_rssi(struct rx5808 *self, uint32_t rssi)
 {
 	self->rssi_raw = rssi;
-	
+
+	//Do not sample until min measure time is exceed
+	if (self->rssi_timer < RX5808_RSSI_MIN_MEASURE_TIME_MS)
+		return;
+
 	rx5808_sample_rssi(self, rssi);
 }
 
+//Returns averaged RSSI
 float rx5808_get_rssi(struct rx5808 *self)
 {
 	if (self->samples_count <= 0)
 		return 0;
-	
-	return self->samples_sum / self->samples_count;
+
+	return (float)self->samples_sum / self->samples_count;
 }
 
+//Returns RAW, unprocessed rssi
 uint32_t rx5808_get_rssi_raw(struct rx5808 *self)
-{	
+{
 	return self->rssi_raw;
 }
 
-// UPDATE ---------------------------------------------------------------------
+///////////////////////////////////////////////////////////////////////////////
+// UPDATE
 enum rx5808_event {
 	RX5808_EVENT_NONE,
 	RX5808_EVENT_WRITE,
@@ -229,7 +242,7 @@ enum rx5808_event rx5808_try_write_freq_mhz(struct rx5808 *self)
 		return RX5808_EVENT_NONE;
 
 	self->set_freq_mhz_update = false;
-	
+
 	uint16_t syn_rf_n_reg  = (self->set_freq_mhz - 479) / 2;
 	uint8_t	 syn_rf_a_reg  = syn_rf_n_reg % 32;
 	syn_rf_n_reg	      /= 32;
@@ -243,10 +256,12 @@ enum rx5808_event rx5808_try_write_freq_mhz(struct rx5808 *self)
 	return RX5808_EVENT_WRITE;
 }
 
-enum rx5808_event rx5808_update(struct rx5808 *self)
+enum rx5808_event rx5808_update(struct rx5808 *self, clock_t delta)
 {
+	self->rssi_timer += delta;
+
 	ASYNC_DISPATCH(self->async_state);
-	
+
 	rx5808_frame_write(&self->frame, RX5808_REG_A,
 			   self->ref_clock_div);
 
