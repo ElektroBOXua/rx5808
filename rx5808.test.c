@@ -55,26 +55,31 @@ void rx5808_test_rssi()
 	struct rx5808 rx;
 	rx5808_init(&rx);
 
+	//Write first frame (clock frequency)
 	rx5808_update(&rx, 0);
-	rx5808_ack_rssi(&rx, 0);
 
+	//Write second frame (set frequency)
+	rx5808_update(&rx, 0);
+
+	//Ack and measure rssi at different moments
 	rx5808_update(&rx, 0);
 	rx5808_ack_rssi(&rx, 5);
-
 	RX5808_TEST(rx5808_get_rssi(&rx) == 0.0);
-	//printf("\tRSSI: %f\n", rx5808_get_rssi(&rx));
 
 	rx5808_update(&rx, 25);
 	rx5808_ack_rssi(&rx, 5);
-
 	RX5808_TEST(rx5808_get_rssi(&rx) == 5.0);
-	//printf("\tRSSI: %f\n", rx5808_get_rssi(&rx));
 
-	rx5808_update(&rx, 25);
+	rx5808_update(&rx, 0);
 	rx5808_ack_rssi(&rx, 10);
-
 	RX5808_TEST(rx5808_get_rssi(&rx) == 7.5);
-	//printf("\tRSSI: %f\n", rx5808_get_rssi(&rx));
+
+	//Check rx5808_rssi_is_ready (must be false on 25ms)
+	RX5808_TEST(!rx5808_rssi_is_ready(&rx));
+
+	//Check rx5808_rssi_is_ready (must be true after 30ms)
+	rx5808_update(&rx, 5);
+	RX5808_TEST(rx5808_rssi_is_ready(&rx));
 
 	printf("\n");
 }

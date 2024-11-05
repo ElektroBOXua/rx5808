@@ -1,7 +1,8 @@
 #ifndef  RX5808_GUARD
 #define  RX5808_GUARD
 
-#define RX5808_RSSI_MIN_MEASURE_TIME_MS 25
+#define RX5808_RSSI_START_DELAY_MS  25
+#define RX5808_RSSI_READY_TIME_MS  (RX5808_RSSI_START_DELAY_MS + 5)
 
 ///////////////////////////////////////////////////////////////////////////////
 // https://github.com/furdog/async/blob/main/async.h
@@ -207,11 +208,17 @@ void rx5808_ack_rssi(struct rx5808 *self, uint32_t rssi)
 {
 	self->rssi_raw = rssi;
 
-	//Do not sample until min measure time is exceed
-	if (self->rssi_timer < RX5808_RSSI_MIN_MEASURE_TIME_MS)
+	//Do not sample until start delay elapsed
+	if (self->rssi_timer < RX5808_RSSI_START_DELAY_MS)
 		return;
 
 	rx5808_sample_rssi(self, rssi);
+}
+
+//Tells if RSSI is ready to be safely measured
+bool rx5808_rssi_is_ready(struct rx5808 *self)
+{
+	return self->rssi_timer >= RX5808_RSSI_READY_TIME_MS;
 }
 
 //Returns averaged RSSI
